@@ -8,4 +8,10 @@
 - shipping price
 - console variant
 ## Preliminary roles
- ``` TODO ```
+ ```mermaid
+    graph TD;
+    A[Listing provider];
+    B[Price assessor];
+    A -->|Give listings| B;
+    
+```
