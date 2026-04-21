@@ -22,3 +22,27 @@
     D -->|Give historical price data for a product| B;
     A -->|Provide new price data| D;
 ```
+preliminary roles for finding game for cheap locally
+
+```mermaid
+   graph TD;
+   A[Listing provider];
+   B[Deal assessor];
+   C[Bundle provider];
+   D[User]
+   A -->|Give Listings| B;
+   B -->|Give good deals| C;
+   C -->|Provide best bundles below given budget| D;
+```
+preliminary roles for finding best deals for a budget
+
+## Role model
+### Role schema
+Listing provider
+### Description
+This role is responsible for scanning the stores and giving product listings.
+### Protocols and activities
+__ScanStores__, ProvideListings, SendStores
+### Permissions
+- **Generates** Listings
+- **Reads** Stores
