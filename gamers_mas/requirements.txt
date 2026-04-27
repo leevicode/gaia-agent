@@ -1,0 +1,8 @@
+# Stable requirements for the current mock-data SPADE MAS prototype.
+# Required interpreter: Python 3.12.x only
+# Install into a Python 3.12 virtual environment.
+
+spade==4.1.2
+slixmpp-multiplatform==1.12.0
+python-dotenv==1.2.2
+pytest>=8.0,<9.0
