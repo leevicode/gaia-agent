@@ -5,8 +5,39 @@ from spade.behaviour import CyclicBehaviour
 from spade.message import Message
 
 from app.matching import resolve_catalog_key
-from app.mock_data import GRAY_MARKET_DEALS
 from app.protocols import GRAY_MARKET_RESULTS, SEARCH_GRAY_MARKET
+from app.sources.mock_sources import MockGrayMarketSource
+
+
+def build_gray_market_search_result(
+    game_title: str,
+    match_mode: str = "fuzzy",
+    source: MockGrayMarketSource | None = None,
+) -> dict:
+    if source is None:
+        source = MockGrayMarketSource()
+
+    match_result = resolve_catalog_key(
+        game_title,
+        source.deal_catalog.keys(),
+        match_mode=match_mode,
+    )
+
+    resolved_title = match_result["resolved_key"]
+
+    if resolved_title:
+        deals = source.search_deals(resolved_title)
+    else:
+        deals = []
+
+    return {
+        "search_title": game_title,
+        "resolved_title": resolved_title,
+        "match_status": match_result["status"],
+        "suggestions": match_result["suggestions"],
+        "deals": deals,
+        "source_adapter": source.source_name,
+    }
 
 
 class GrayMarketAgent(Agent):
@@ -37,36 +68,30 @@ class GrayMarketAgent(Agent):
                 print("[GrayMarketAgent] Invalid match_mode.")
                 return
 
-            match_result = resolve_catalog_key(
-                game_title,
-                GRAY_MARKET_DEALS.keys(),
+            result = build_gray_market_search_result(
+                game_title=game_title.strip(),
                 match_mode=match_mode,
             )
-            resolved_title = match_result["resolved_key"]
-            deals = GRAY_MARKET_DEALS.get(resolved_title, []) if resolved_title else []
 
             reply = Message(to=str(msg.sender))
             reply.set_metadata("performative", "inform")
             reply.set_metadata("protocol", GRAY_MARKET_RESULTS)
-            reply.body = json.dumps(
-                {
-                    "search_title": game_title,
-                    "resolved_title": resolved_title,
-                    "match_status": match_result["status"],
-                    "suggestions": match_result["suggestions"],
-                    "deals": deals,
-                }
-            )
+            reply.body = json.dumps(result)
 
             await self.send(reply)
+
+            resolved_title = result["resolved_title"]
+            deals = result["deals"]
+            match_status = result["match_status"]
+            suggestions = result["suggestions"]
 
             if resolved_title:
                 print(
                     f"[GrayMarketAgent] Returned {len(deals)} gray-market deal(s) for {resolved_title}."
                 )
-            elif match_result["status"] == "ambiguous":
+            elif match_status == "ambiguous":
                 print(
-                    f"[GrayMarketAgent] Ambiguous game title '{game_title}'. Suggestions: {match_result['suggestions']}"
+                    f"[GrayMarketAgent] Ambiguous game title '{game_title}'. Suggestions: {suggestions}"
                 )
             else:
                 print(f"[GrayMarketAgent] No match found for '{game_title}'.")

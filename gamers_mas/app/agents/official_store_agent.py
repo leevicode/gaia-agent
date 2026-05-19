@@ -5,8 +5,43 @@ from spade.behaviour import CyclicBehaviour
 from spade.message import Message
 
 from app.matching import resolve_catalog_key
-from app.mock_data import OFFICIAL_STORE_DEALS
 from app.protocols import OFFICIAL_RESULTS, SEARCH_OFFICIAL
+from app.sources.mock_sources import MockOfficialStoreSource
+
+
+def build_official_store_search_result(
+    search_title: str,
+    match_mode: str = "fuzzy",
+    max_price: float | None = None,
+    source: MockOfficialStoreSource | None = None,
+) -> dict:
+    if source is None:
+        source = MockOfficialStoreSource()
+
+    match_result = resolve_catalog_key(
+        search_title,
+        source.deal_catalog.keys(),
+        match_mode=match_mode,
+    )
+
+    resolved_title = match_result["resolved_key"]
+
+    if resolved_title:
+        deals = source.search_deals(
+            resolved_title,
+            max_price=max_price,
+        )
+    else:
+        deals = []
+
+    return {
+        "search_title": search_title,
+        "resolved_title": resolved_title,
+        "match_status": match_result["status"],
+        "suggestions": match_result["suggestions"],
+        "deals": deals,
+        "source_adapter": source.source_name,
+    }
 
 
 class OfficialStoreAgent(Agent):
@@ -38,40 +73,31 @@ class OfficialStoreAgent(Agent):
                 print("[OfficialStoreAgent] Invalid match_mode.")
                 return
 
-            match_result = resolve_catalog_key(
-                search_title,
-                OFFICIAL_STORE_DEALS.keys(),
+            result = build_official_store_search_result(
+                search_title=search_title.strip(),
                 match_mode=match_mode,
+                max_price=max_price,
             )
-            resolved_title = match_result["resolved_key"]
-
-            deals = OFFICIAL_STORE_DEALS.get(resolved_title, []) if resolved_title else []
-
-            if isinstance(max_price, (int, float)):
-                deals = [deal for deal in deals if deal["price_eur"] <= float(max_price)]
 
             reply = Message(to=str(msg.sender))
             reply.set_metadata("performative", "inform")
             reply.set_metadata("protocol", OFFICIAL_RESULTS)
-            reply.body = json.dumps(
-                {
-                    "search_title": search_title,
-                    "resolved_title": resolved_title,
-                    "match_status": match_result["status"],
-                    "suggestions": match_result["suggestions"],
-                    "deals": deals,
-                }
-            )
+            reply.body = json.dumps(result)
 
             await self.send(reply)
+
+            resolved_title = result["resolved_title"]
+            deals = result["deals"]
+            match_status = result["match_status"]
+            suggestions = result["suggestions"]
 
             if resolved_title:
                 print(
                     f"[OfficialStoreAgent] Returned {len(deals)} official deal(s) for {resolved_title}."
                 )
-            elif match_result["status"] == "ambiguous":
+            elif match_status == "ambiguous":
                 print(
-                    f"[OfficialStoreAgent] Ambiguous search title '{search_title}'. Suggestions: {match_result['suggestions']}"
+                    f"[OfficialStoreAgent] Ambiguous search title '{search_title}'. Suggestions: {suggestions}"
                 )
             else:
                 print(f"[OfficialStoreAgent] No match found for '{search_title}'.")

@@ -3,8 +3,85 @@ import json
 from spade.agent import Agent
 from spade.behaviour import CyclicBehaviour
 
+from app.bdi_trace_store import append_bdi_traces
 from app.protocols import PRESENT_RECOMMENDATION
 from app.runtime_response import write_response
+
+
+def format_foreign_currency_deal(deal: dict) -> str:
+    store = deal.get("store", "Unknown store")
+    price_usd = deal.get("price_usd")
+    currency = deal.get("currency", "USD")
+    source_adapter = deal.get("source_adapter", "unknown source")
+
+    if isinstance(price_usd, (int, float)):
+        price_text = f"{price_usd:.2f} {currency}"
+    else:
+        price_text = f"unknown price {currency}"
+
+    return (
+        f"{store} - {price_text} | source={source_adapter} | "
+        "not compared with EUR results"
+    )
+
+
+def build_foreign_currency_summary(foreign_currency_deals: list[dict]) -> list[str]:
+    return [
+        format_foreign_currency_deal(deal)
+        for deal in foreign_currency_deals
+    ]
+
+
+def format_recommended_legitimate_deal(deal: dict) -> str:
+    store = deal.get("store", "Unknown store")
+    price_eur = deal.get("price_eur")
+    trust_score = deal.get("trust_score")
+    source_type = deal.get("source_type")
+
+    if isinstance(price_eur, (int, float)):
+        price_text = f"€{price_eur:.2f}"
+    else:
+        price_text = "unknown EUR price"
+
+    if deal.get("currency_conversion_applied") is True:
+        original_price_usd = deal.get("original_price_usd", deal.get("price_usd"))
+        conversion_rate = deal.get("conversion_rate")
+        conversion_rate_source = deal.get("conversion_rate_source", "unknown rate source")
+        conversion_rate_date = deal.get("conversion_rate_date", "unknown date")
+
+        if isinstance(original_price_usd, (int, float)):
+            original_text = f"{original_price_usd:.2f} USD"
+        else:
+            original_text = "unknown USD price"
+
+        if isinstance(conversion_rate, (int, float)):
+            rate_text = f"1 USD = {conversion_rate:.6f} EUR"
+        else:
+            rate_text = "unknown conversion rate"
+
+        return (
+            f"Recommended legitimate deal: {store} - {price_text} | "
+            f"converted from {original_text} | {rate_text} | "
+            f"rate source={conversion_rate_source} | rate date={conversion_rate_date} | "
+            f"trust={trust_score} | type={source_type}"
+        )
+
+    return (
+        f"Recommended legitimate deal: {store} - {price_text} | "
+        f"trust={trust_score} | type={source_type}"
+    )
+
+
+def build_software_bdi_trace_list(
+    coordinator_bdi_trace: dict | None,
+    authorized_reseller_bdi_trace: dict | None,
+    recommendation_bdi_trace: dict | None,
+) -> list[dict | None]:
+    return [
+        coordinator_bdi_trace,
+        authorized_reseller_bdi_trace,
+        recommendation_bdi_trace,
+    ]
 
 
 class OutputAgent(Agent):
@@ -29,10 +106,24 @@ class OutputAgent(Agent):
             search_notices = payload.get("search_notices", [])
             match_status = payload.get("match_status")
             suggestions = payload.get("suggestions", [])
+            coordinator_bdi_trace = payload.get("bdi_trace")
+            authorized_reseller_bdi_trace = payload.get("authorized_reseller_bdi_trace")
+            recommendation_bdi_trace = payload.get("recommendation_bdi_trace")
+            value_ranker_bdi_trace = payload.get("value_ranker_bdi_trace")
 
             if scenario == "local_console_search":
                 product_name = payload.get("product_name")
                 ranked_deals = payload.get("ranked_deals", [])
+
+                append_bdi_traces(
+                    request_id=request_id,
+                    scenario="local_console_search",
+                    query=product_name,
+                    traces=[
+                        coordinator_bdi_trace,
+                        value_ranker_bdi_trace,
+                    ],
+                )
 
                 print(f"[OutputAgent] Final presentation for {product_name}:")
 
@@ -202,6 +293,18 @@ class OutputAgent(Agent):
             game_title = payload.get("game_title")
             best_legitimate_deal = payload.get("best_legitimate_deal")
             gray_market_warning_deal = payload.get("gray_market_warning_deal")
+            foreign_currency_deals = payload.get("foreign_currency_deals", [])
+
+            append_bdi_traces(
+                request_id=request_id,
+                scenario="software_deal",
+                query=game_title,
+                traces=build_software_bdi_trace_list(
+                    coordinator_bdi_trace=coordinator_bdi_trace,
+                    authorized_reseller_bdi_trace=authorized_reseller_bdi_trace,
+                    recommendation_bdi_trace=recommendation_bdi_trace,
+                ),
+            )
 
             print(f"[OutputAgent] Final presentation for {game_title}:")
 
@@ -239,6 +342,7 @@ class OutputAgent(Agent):
                         "query": game_title,
                         "best_legitimate_deal": None,
                         "gray_market_warning_deal": None,
+                        "foreign_currency_deals": foreign_currency_deals,
                         "search_notices": search_notices,
                         "match_status": "not_found",
                     }
@@ -246,14 +350,15 @@ class OutputAgent(Agent):
                 return
 
             if best_legitimate_deal:
-                print(
-                    f"  Recommended legitimate deal: {best_legitimate_deal['store']} - "
-                    f"€{best_legitimate_deal['price_eur']} | "
-                    f"trust={best_legitimate_deal['trust_score']} | "
-                    f"type={best_legitimate_deal['source_type']}"
-                )
+                print(f"  {format_recommended_legitimate_deal(best_legitimate_deal)}")
             else:
-                print("  No legitimate deal found.")
+                print("  No EUR-comparable legitimate deal found.")
+
+            if foreign_currency_deals:
+                print("  Foreign-currency deal(s) found but not used for EUR ranking:")
+                for summary in build_foreign_currency_summary(foreign_currency_deals[:3]):
+                    print(f"    - {summary}")
+                print("  Currency note: no USD-to-EUR conversion has been applied.")
 
             if gray_market_warning_deal:
                 print("  WARNING: Gray-market option detected.")
@@ -274,6 +379,7 @@ class OutputAgent(Agent):
                     "query": game_title,
                     "best_legitimate_deal": best_legitimate_deal,
                     "gray_market_warning_deal": gray_market_warning_deal,
+                    "foreign_currency_deals": foreign_currency_deals,
                     "search_notices": search_notices,
                 }
             )
