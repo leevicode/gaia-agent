@@ -1,0 +1,71 @@
+# Python virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# Python cache and compiled files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Test and coverage output
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.nox/
+
+# Build and packaging output
+build/
+dist/
+*.egg-info/
+.eggs/
+*.egg
+
+# Local environment variables and secrets
+.env
+.env.*
+!.env.example
+
+# Runtime request and response files
+request.json
+runtime_response.json
+bdi_trace.json
+
+# Runtime cache and temporary files
+cache/
+*.log
+*.tmp
+*.temp
+
+# Docker and compose local override files
+docker-compose.override.yml
+
+# IDE and editor files
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS-generated files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Jupyter notebooks checkpoints, if any
+.ipynb_checkpoints/
+
+# MyPy and type checker cache
+.mypy_cache/
+.pyre/
+.pytype/
+
+# Ruff and other lint caches
+.ruff_cache/
+
+# Local reports or generated artifacts
+*.bak
+*.orig
